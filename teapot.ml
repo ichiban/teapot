@@ -33,7 +33,7 @@ let run () =
   logf "Init\n%!";
   Tcp.init loop server;
   let bind_addr = Addr.ip4 "127.0.0.1" 8000 in
-  Tcp.bind server bind_addr 0;
+  Tcp.bind server bind_addr Tcp.Flags.none;
   let server_stream = Tcp.to_stream server in
   logf "Listen\n%!";
   Stream.listen server_stream 128 on_new_connection;

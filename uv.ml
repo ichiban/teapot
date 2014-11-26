@@ -151,14 +151,22 @@ module Addr = struct
   let sin_zero = field t "sin_zero" (array 8 char)
   let () = seal t
 		
-  let ip4 a p =
-    let addr = t |> make |> addr in
+  let ip4 address port =
+    let sockaddr = t |> make |> addr in
     let native = string @-> int @-> t' @-> returning int |> foreign "uv_ip4_addr" in
-    native a p addr |> handle_error;
-    addr
+    native address port sockaddr |> handle_error;
+    sockaddr
 end
 
 module Tcp = struct
+  module Flags = struct
+    type t = Unsigned.UInt.t
+    let t = uint
+    let none : t = Unsigned.UInt.of_int 0
+    let ipv6only : t = Unsigned.UInt.of_int 1
+    let (+) = Unsigned.UInt.logor
+  end
+
   type t
   let t : t abstract typ =
     abstract
@@ -170,14 +178,14 @@ module Tcp = struct
   let to_handle = coerce t' Handle.t'
   let alloc () =
     allocate_n t ~count:1
-  let init l t =
+  let init loop tcp =
     let native = Loop.t' @-> t' @-> returning int |> foreign "uv_tcp_init" in
-    native l t |> handle_error
+    native loop tcp |> handle_error
   let make loop =
     let tcp = alloc () in
     init loop tcp;
     tcp
-  let bind t s f =
-    let native = t' @-> Addr.t' @-> uint @-> returning int |> foreign "uv_tcp_bind" in
-    native t s (Unsigned.UInt.of_int f) |> handle_error
+  let bind tcp address flags =
+    let native = t' @-> Addr.t' @-> Flags.t @-> returning int |> foreign "uv_tcp_bind" in
+    native tcp address flags |> handle_error
 end
