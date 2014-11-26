@@ -1,0 +1,38 @@
+.PHONY: all install clean
+.SUBDIRS: uv_bindings
+
+USE_OCAMLFIND = true
+OCAMLPACKS[] =
+  batteries
+  ctypes
+  ctypes.foreign
+# OCAMLINCLUDES +=
+
+# OCAMLFLAGS    +=
+# OCAMLCFLAGS   +=
+# OCAMLOPTFLAGS +=
+OCAML_LINK_FLAGS += \
+  -cclib "-force_load uv_bindings/libuv_bindings.a \
+          -force_load libuv/.libs/libuv.a"
+# OCAML_BYTE_LINK_FLAGS +=
+# OCAML_NATIVE_LINK_FLAGS +=
+
+FILES[] =
+   teapot
+   uv
+
+PROGRAM = teapot
+# OCAML_LIBS +=
+OCAML_CLIBS += libuv/.libs/libuv uv_bindings/libuv_bindings
+# OCAML_OTHER_LIBS +=
+# OCAML_LIB_FLAGS +=
+
+.DEFAULT: $(OCamlProgram $(PROGRAM), $(FILES))
+
+clean:
+  rm -f *.cmi
+  rm -f *.cmx
+  rm -f *.o
+  rm -f *.opt
+  rm -f $(PROGRAM)
+

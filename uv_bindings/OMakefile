@@ -1,0 +1,20 @@
+# CFLAGS +=
+# ASFLAGS +=
+# LDFLAGS +=
+INCLUDES += ../libuv/include
+
+LIBFILES[] =
+  uv_bindings
+
+LIB = libuv_bindings
+
+libuv = ../libuv/.libs/libuv.a
+
+$(libuv):
+  cd ../libuv && sh autogen.sh && ./configure && make
+
+.DEFAULT: $(libuv) $(StaticCLibrary $(LIB), $(LIBFILES))
+
+clean:
+  rm -f *.o
+  rm -f $(LIB)$(EXT_DLL)
