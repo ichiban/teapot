@@ -1,3 +1,4 @@
+open Batteries
 open Ctypes
 open PosixTypes
 open Foreign
@@ -58,26 +59,51 @@ module HandleType = struct
   let udp : t = 15
   let signal : t = 16
   let file : t = 17
-  let size = t @-> returning size_t |> foreign "uv_handle_size"
+  let size handle_type =
+    let native = t @-> returning size_t |> foreign "uv_handle_size" in
+    native handle_type |> Unsigned.Size_t.to_int
+end
+
+module ReqType = struct
+  type t = int
+  let t = int
+  let unknown : t = 0
+  let req : t = 1
+  let connect : t = 2
+  let write : t = 3
+  let shutdown : t = 4
+  let udp_send : t = 5
+  let fs : t = 6
+  let work : t = 7
+  let getaddrinfo : t = 8
+  let getnameinfo : t = 9
+  let size req_type =
+    let native = t @-> returning size_t |> foreign "uv_req_size" in
+    native req_type |> Unsigned.Size_t.to_int
 end
 
 module Buf = struct
+  let size = void @-> returning int |> foreign "uv_buf_size"
   type t
   let t : t abstract typ =
     abstract
       ~name:"uv_buf_t"
-      ~size:0
+      ~size:(size ())
       ~alignment:0
   let t' = ptr t
   let get_base = t' @-> returning (ptr char) |> foreign "uv_buf_get_base"
   let set_base = t' @-> ptr char @-> returning void |> foreign "uv_buf_set_base"
-  let get_len = t' @-> returning size_t |> foreign "uv_buf_get_len"
-  let set_len = t' @-> size_t @-> returning void |> foreign "uv_buf_set_len"
+  let get_len buf =
+    let native = t' @-> returning size_t |> foreign "uv_buf_get_len" in
+    native buf |> Unsigned.Size_t.to_int
+  let set_len buf size =
+    let native = t' @-> size_t @-> returning void |> foreign "uv_buf_set_len" in
+    native buf (Unsigned.Size_t.of_int size)
   let allocate buf suggested_size =
     let size = Unsigned.Size_t.to_int suggested_size in
     let base = Ctypes.allocate_n char ~count:size in
     set_base buf base;
-    set_len buf suggested_size
+    set_len buf size
 end
 
 module Handle = struct
@@ -85,12 +111,13 @@ module Handle = struct
   let t : t abstract typ =
     abstract
       ~name:"uv_handle_t"
-      ~size:HandleType.(size handle |> Unsigned.Size_t.to_int)
-      ~alignment:1
+      ~size:HandleType.(size handle)
+      ~alignment:0
   let t' = ptr t
   let alloc_cb = t' @-> size_t @-> Buf.t' @-> returning void |> funptr
   let close_cb = t' @-> returning void |> funptr
   let close = t' @-> close_cb @-> returning void |> foreign "uv_close"
+  let get_type = t' @-> returning int |> foreign "uv_handle_get_type"
 end
 
 module Idle = struct
@@ -98,8 +125,8 @@ module Idle = struct
   let t : t abstract typ =
     abstract
       ~name:"uv_idle_t"
-      ~size:HandleType.(size idle |> Unsigned.Size_t.to_int)
-      ~alignment:1
+      ~size:HandleType.(size idle)
+      ~alignment:0
   let t' = ptr t
   let idle_cb = t' @-> returning void |> funptr
   let init loop idle =
@@ -118,9 +145,10 @@ module Stream = struct
   let t : t abstract typ =
     abstract
       ~name:"uv_stream_t"
-      ~size:HandleType.(size stream |> Unsigned.Size_t.to_int)
+      ~size:HandleType.(size stream)
       ~alignment:0
   let t' = ptr t
+  let to_handle = coerce t' Handle.t'
   let connection_cb = t' @-> int @-> returning void |> funptr
   let read_cb = t' @-> ssize_t @-> Buf.t' @-> returning void |> funptr
   let listen stream backlog cb =
@@ -132,6 +160,9 @@ module Stream = struct
   let read_start stream alloc_cb cb =
     let native = t' @-> Handle.alloc_cb @-> read_cb @-> returning int |> foreign "uv_read_start" in
     native stream alloc_cb cb |> handle_error
+  let is_writable handle =
+    let native = t' @-> returning int |> foreign "uv_is_writable" in
+    native handle |> Bool.of_int
 end
 
 module Addr = struct
@@ -171,7 +202,7 @@ module Tcp = struct
   let t : t abstract typ =
     abstract
       ~name:"uv_tcp_t"
-      ~size:HandleType.(size tcp |> Unsigned.Size_t.to_int)
+      ~size:HandleType.(size tcp)
       ~alignment:0
   let t' = ptr t
   let to_stream = coerce t' Stream.t'
@@ -188,4 +219,32 @@ module Tcp = struct
   let bind tcp address flags =
     let native = t' @-> Addr.t' @-> Flags.t @-> returning int |> foreign "uv_tcp_bind" in
     native tcp address flags |> handle_error
+end
+	       
+module Write = struct
+  type t
+  let t : t abstract typ =
+    abstract
+      ~name:"uv_write_t"
+      ~size:ReqType.(size write)
+      ~alignment:0
+  let t' = ptr t
+  let write_cb = t' @-> int @-> returning void |> funptr
+  let alloc () =
+    allocate_n t ~count:1
+  let write req handle bufs cb =
+    let native = t' @-> Stream.t' @-> Buf.t' @-> uint @-> write_cb @-> returning int |> foreign "uv_write" in
+    let array = List.map (!@) bufs |> CArray.of_list Buf.t in
+    let start = CArray.start array in
+    let length = CArray.length array |> Unsigned.UInt.of_int in
+    native req handle start length cb |> handle_error
+  let try_write req handle bufs cb =
+    let native = t' @-> Stream.t' @-> Buf.t' @-> uint @-> write_cb @-> returning int |> foreign "uv_try_write" in
+    let array = List.map (!@) bufs |> CArray.of_list Buf.t in
+    let start = CArray.start array in
+    let length = CArray.length array |> Unsigned.UInt.of_int in
+    native req handle start length cb |> handle_error
+  let try_write' req handle buf cb =
+    let native = t' @-> Stream.t' @-> Buf.t' @-> write_cb @-> returning int |> foreign "uv_try_write_mod" in
+    native req handle buf cb |> handle_error
 end

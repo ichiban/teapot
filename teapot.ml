@@ -1,3 +1,4 @@
+open Batteries
 open BatLog
 open Uv
 
@@ -8,17 +9,37 @@ let on_allocation handle suggested_size buf =
   logf "allocation\n%!";
   Buf.allocate buf suggested_size
 
+let on_write req status =
+  try
+    logf "write\n%!";
+    handle_error status;
+    ()
+  with
+  | _ ->
+     logf "write error!\n%!"
+
 let on_read stream nread buf =
-  logf "nread: %d\n%!" (Signed.Long.to_int nread);
-  ()
+  try
+    logf "nread: %d\n%!" (Signed.Long.to_int nread);
+    logf "stream handle type: %d\n%!" (Stream.to_handle stream |> Handle.get_type);
+    if Stream.is_writable stream then
+      logf "writable!\n%!";
+    let req = Write.alloc () in
+    Write.try_write' req stream buf on_write;
+    ()
+  with
+  | _ ->
+     logf "read error!\n%!"
 
 let on_close handle =
+  logf "close\n%!";
   ()
 
 let on_new_connection stream status =
   logf "new connection\n%!";
   handle_error status;
   let client = Tcp.make loop in
+  logf "client handle type: %d\n%!" (Tcp.to_handle client |> Handle.get_type);
   try
     let server_stream = Tcp.to_stream server in
     let client_stream = Tcp.to_stream client in
